@@ -1,0 +1,33 @@
+#!/bin/bash
+#Расположение католога, хранящего удаленные файлы
+trashDirLocation=$HOME/.trash
+
+#Проверка на то, что аргумент был передан
+if [ "$1" == "" ]
+then
+	echo "no input file passed"
+	exit 1
+fi
+
+#Проверка на то, что файл существует
+if ! [ -e $1 ]
+then
+	echo "can't find file named \"$1\" in current folder"
+	exit 1
+fi
+
+#Проверка на то, что католог существует, иначе создадим его
+if ! [ -e $trashDirLocation ]
+then
+	mkdir $trashDirLocation
+fi
+
+#Уникальное имя состоит из исходного и timestamp
+fileName="$1_`date +%s`"
+
+#Создадим жесткую ссылку и удалим исходный файл
+ln $1 $trashDirLocation/$fileName
+rm $1
+
+echo "$PWD/$1" >> $trashDirLocation/trash.log
+

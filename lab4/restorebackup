@@ -1,0 +1,49 @@
+#!/bin/bash
+
+workingDir=$HOME/listtask
+currentDate=`date +%Y'-'%m'-'%d`
+lastDate=`ls "$HOME" | grep "^Backup-" | sed "s/^Backup-//" | sort -r | head -n 1`
+
+#Проверка на то, что католог существует
+if ! [ -e $workingDir ]
+then
+	echo "No target directory to make backup"
+	exit 1
+fi
+
+#Проверяет когда был последний бэкап и определяет папку в которую производим бэкап
+if [ "$lastDate" == "" ]
+then
+	echo "No backup found"
+	exit 1
+fi
+
+backupDir="$HOME/Backup-$lastDate"
+
+#filesInCurrentDir содержит имена всех файлов и папок в $workingDir, кроме '.' и '..'
+filesInCurrentDir=()
+#Из listOfMainFiles в цикле исключаются все версионные сохранения
+listOfMainFiles=`ls -a "$backupDir" | grep -E -v "^\.\.?$"`
+IFS=$'\n' read -r -d '' -a filesInCurrentDir < <( echo "$listOfMainFiles" && printf '\0' )
+for i in ${filesInCurrentDir[*]}
+do
+	listOfMainFiles=`echo "$listOfMainFiles" | grep -v "^$i\."`
+done
+
+unset filesInCurrentDir
+#Очищает рабочую папку
+IFS=$'\n' read -r -d '' -a filesInCurrentDir < <( ls -a "$workingDir" | grep -E -v "^\.\.?$" && printf '\0' )
+for i in ${filesInCurrentDir[*]}
+do
+	rm -r "$workingDir/$i"
+done
+
+unset filesInCurrentDir
+#Копируем оригинальные файлы
+IFS=$'\n' read -r -d '' -a filesInCurrentDir < <( echo "$listOfMainFiles" && printf '\0' )
+for i in ${filesInCurrentDir[*]}
+do
+	cp -r "$backupDir/$i" "$workingDir/$i"
+done
+
+

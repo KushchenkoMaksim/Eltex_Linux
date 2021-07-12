@@ -1,0 +1,63 @@
+#!/bin/bash
+
+workingDir=$HOME/listtask
+currentDate=`date +%Y'-'%m'-'%d`
+lastDate=`ls "$HOME" | grep "^Backup-" | sed "s/^Backup-//" | sort -r | head -n 1`
+addString=""
+modifyString=""
+
+#Проверка на то, что католог существует
+if ! [ -e $workingDir ]
+then
+	echo "No target directory to make backup"
+	exit 1
+fi
+
+#Сравнивает даты.
+#Аргументы: новая_дата старая_дата
+compareDates(){
+	let DIFF=($(date +%s -d $1)-$(date +%s -d $2))/86400
+	echo $DIFF
+}
+
+#Проверяет когда был последний бэкап и определяет папку в которую производим бэкап
+if [ "$lastDate" != "" ] && [ `compareDates $currentDate $lastDate` -lt "7" ]
+then
+	backupDir="$HOME/Backup-$lastDate"
+else
+	backupDir="$HOME/Backup-$currentDate"
+	mkdir "$backupDir"
+fi
+
+#Функция делает бэкап для одного файла, если необходимо. Ведет записи.
+#Аргументы: имя_файла
+makeBackup(){
+	if [ -e "$backupDir/$1" ]
+	then
+		if ! [ "`diff -rq "$backupDir/$1" "$workingDir/$1"`" == "" ]
+		then	
+			mv "$backupDir/$1" "$backupDir/$1.$currentDate"
+			cp -r "$workingDir/$1" "$backupDir/$1"
+			modifyString="$modifyString $1->$1.$currentDate"
+			addString="$addString $1"
+		fi
+	else
+		cp -r "$workingDir/$1" "$backupDir/$1"
+		addString="$addString $1"
+	fi
+}
+
+#filesInCurrentDir содержит имена всех файлов и папок в $workingDir, кроме '.' и '..'
+filesInCurrentDir=()
+IFS=$'\n' read -r -d '' -a filesInCurrentDir < <( ls -a "$workingDir" | grep -E -v "^\.\.?$" && printf '\0' )
+for i in ${filesInCurrentDir[*]}
+do
+	makeBackup "$i"
+done
+
+#Вывод в журнал
+echo "New backup in $backupDir. $currentDate" >> "$HOME/backup-report"
+echo "Modified files: $modifyString" >> "$HOME/backup-report"
+echo "Added files: $addString" >> "$HOME/backup-report"
+echo >> "$HOME/backup-report"
+

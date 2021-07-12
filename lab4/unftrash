@@ -1,0 +1,91 @@
+#!/bin/bash
+#Расположение католога, хранящего удаленные файлы
+trashDirLocation=$HOME/.trash
+
+#Функция востанавливающая файл
+#Передаем: оригинальный_путь имя временная_метка порядковый_номер
+restore(){
+	way=`echo "$1" | sed "s/\/$2$//"`
+	#echo "way is $way"
+	
+	#Проверка на то, что исходный католог существует, иначе используем домашний
+	if ! [ -e "$way" ]
+	then
+		way="$HOME/$2"
+	else
+		way="$1"
+	fi
+	
+	#Проверка на существование файла
+	if [ -e "$way" ]
+	then
+		echo "Can't restore file with same name already exist"
+		exit 1
+	fi
+
+	#Создадим жесткую ссылку, удалим файл в trash
+	ln "$trashDirLocation/$2_$3" "$way"
+	rm "$trashDirLocation/$2_$3"
+	
+	#Удалим нужную запись в trash.log: вырежем все подходящие, выберем нужную по порядку, удалим, перезапишем оставшиеся в файл 
+	local=`grep "/$2$" "$trashDirLocation/trash.log"`
+	sed -i "/\/$2$/d" "$trashDirLocation/trash.log"
+	echo "$local" | sed "$4d" >> "$trashDirLocation/trash.log"
+	echo "Restored at $way"
+	
+}
+
+#Проверка на то, что аргумент был передан
+if [ "$1" == "" ]
+then
+	echo "no input file passed"
+	exit 1
+fi
+
+#Проверка на то, что католог существует
+if ! [ -e $trashDirLocation ]
+then
+	echo "None file have been deleted yet"
+	exit 1
+fi
+
+#Массив прошлых имен
+originalNames=()
+IFS=$'\n' read -r -d '' -a originalNames < <( cat $trashDirLocation/trash.log | grep "/$1$" && printf '\0' )
+#Массив текущих имен
+backupNames=()
+IFS=$'\n' read -r -d '' -a backupNames < <( ls $trashDirLocation | grep "^$1_" && printf '\0' )
+
+#Проверка на то, что файл был удален
+if [ "${#originalNames[*]}" -eq 0 ]
+then
+	echo "File \"$1\" haven't been deleted before"
+	exit 1
+fi
+
+
+echo "Files found: ${#backupNames[*]}"
+echo ;
+
+#Если найденно несколько результатов, каждому файлу присваивается порядковый номер
+#на основе порядка занесения в таблицу. По этому же номеру они располагаются в массиве.
+#После каждого удаления файла, из .log удаляется строка с информацией о соответствующем файле.
+#Если один из файлов был удален, порядковый номер остальных найденных сдвигается на единицу
+#назад, поэтому вводится restCount, позволяющая вычислить новый порядковый номер.
+restCount=0
+#Перебираем все варианты
+for ((i=0; i < ${#backupNames[*]}; i++))
+do
+	timestamp=`echo ${backupNames[i]} | sed s/^.*_//`
+	echo "$((i+1)).	${originalNames[i]}	`date --date="@$timestamp"`"
+	echo -n "Restore?(y/n)"
+	read answer
+	if [ $answer == "y" ] || [ $answer == "yes" ]
+	then
+		#Востанавливаем файл
+		restore "${originalNames[i]}" "$1" "$timestamp" "$(($i+1-$restCount))"
+		restCount=$(($restCount+1))
+	fi
+	echo ;
+done
+
